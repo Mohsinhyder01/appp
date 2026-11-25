@@ -37,10 +37,10 @@ jobs:
           gradle-version: 8.9
 
       - name: Run Unit Tests
-        run: gradle testDebugUnitTest
+        run: gradle testDebugUnitTest --stacktrace
 
       - name: Build Debug APK
-        run: gradle assembleDebug
+        run: gradle assembleDebug --stacktrace
 
       - name: Upload Antigravity Debug APK
         uses: actions/upload-artifact@v4
