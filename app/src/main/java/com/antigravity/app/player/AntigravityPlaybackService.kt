@@ -3,10 +3,8 @@ package com.antigravity.app.player
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
-import androidx.media3.common.util.UnstableApi
 import androidx.media3.database.StandaloneDatabaseProvider
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.cache.CacheDataSource
@@ -23,7 +21,6 @@ object MediaCacheProvider {
     @Volatile
     private var simpleCache: SimpleCache? = null
 
-    @OptIn(UnstableApi::class)
     fun getCache(context: Context): SimpleCache {
         return simpleCache ?: synchronized(this) {
             simpleCache ?: run {
@@ -39,7 +36,6 @@ class AntigravityPlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
 
-    @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
 
