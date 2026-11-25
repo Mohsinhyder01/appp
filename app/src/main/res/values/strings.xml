@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Antigravity</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_todo">To-Do</string>
+    <string name="nav_player">Player</string>
+</resources>

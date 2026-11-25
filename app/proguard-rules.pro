@@ -1,0 +1,2 @@
+-keep class com.antigravity.app.data.model.** { *; }
+-dontwarn androidx.media3.**
