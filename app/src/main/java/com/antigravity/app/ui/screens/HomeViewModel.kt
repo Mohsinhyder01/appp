@@ -21,6 +21,8 @@ data class HomeUiState(
     val pendingTodayTasks: List<TaskItem> = emptyList(),
     val pendingCount: Int = 0,
     val completedCount: Int = 0,
+    val songCount: Int = 0,
+    val ayatCount: Int = 0,
     val dailyAyat: DailyAyat = SeedCatalog.dailyAyatForToday(),
     val playbackState: PlaybackState = PlaybackState()
 )
@@ -33,14 +35,17 @@ class HomeViewModel(
 
     val uiState: StateFlow<HomeUiState> = combine(
         taskRepository.allTasks,
-        audioController.playbackState
-    ) { tasks, playback ->
+        audioController.playbackState,
+        audioRepository.allTracks
+    ) { tasks, playback, allTracks ->
         val pending = tasks.filter { !it.isCompleted }
         val completed = tasks.count { it.isCompleted }
         HomeUiState(
-            pendingTodayTasks = pending.take(4),
+            pendingTodayTasks = pending.take(3),
             pendingCount = pending.size,
             completedCount = completed,
+            songCount = allTracks.count { it.mode == AudioMode.SONG },
+            ayatCount = allTracks.count { it.mode == AudioMode.AYAT },
             dailyAyat = SeedCatalog.dailyAyatForToday(),
             playbackState = playback
         )
@@ -66,13 +71,16 @@ class HomeViewModel(
         viewModelScope.launch {
             val ayats = audioRepository.getTracksByMode(AudioMode.AYAT)
             val target = ayats.firstOrNull { it.id == trackId } ?: ayats.firstOrNull() ?: return@launch
+            audioController.switchMode(AudioMode.AYAT)
             audioController.playTrack(target, ayats)
         }
     }
 
-    fun togglePlayPause() {
-        audioController.togglePlayPause()
-    }
+    fun togglePlayPause() = audioController.togglePlayPause()
+    fun next() = audioController.next()
+
+    fun switchToSongs() = audioController.switchMode(AudioMode.SONG)
+    fun switchToQuran() = audioController.switchMode(AudioMode.AYAT)
 
     companion object {
         fun factory(

@@ -24,11 +24,11 @@ data class PlayerUiState(
     val visibleTracks: List<AudioTrack> = emptyList(),
     val downloadingIds: Set<String> = emptySet(),
     val offlineOnly: Boolean = false,
-    val showArabicText: Boolean = true,
-    val showTranslation: Boolean = true,
     val scannedCandidates: List<DeviceAudioCandidate> = emptyList(),
     val isScanningDevice: Boolean = false,
-    val statusBanner: String? = null
+    val statusBanner: String? = null,
+    val showArabicText: Boolean = true,
+    val showTranslation: Boolean = true
 )
 
 class PlayerViewModel(
@@ -55,14 +55,9 @@ class PlayerViewModel(
         localFlags
     ) { playback, allTracks, downloadingIds, prefs, flags ->
         val modeTracks = allTracks.filter { it.mode == playback.activeMode }
-        val filtered = if (prefs.offlineOnlyFilter) {
-            modeTracks.filter { it.isAvailableOffline }
-        } else {
-            modeTracks
-        }
         PlayerUiState(
             playbackState = playback,
-            visibleTracks = filtered,
+            visibleTracks = modeTracks,
             downloadingIds = downloadingIds,
             offlineOnly = prefs.offlineOnlyFilter,
             showArabicText = flags.showArabicText,
@@ -77,9 +72,7 @@ class PlayerViewModel(
         initialValue = PlayerUiState()
     )
 
-    fun switchMode(mode: AudioMode) {
-        audioController.switchMode(mode)
-    }
+    fun switchMode(mode: AudioMode) = audioController.switchMode(mode)
 
     fun playTrack(track: AudioTrack) {
         val queue = uiState.value.visibleTracks.ifEmpty { listOf(track) }
@@ -92,53 +85,6 @@ class PlayerViewModel(
     fun seekTo(positionMs: Long) = audioController.seekTo(positionMs)
     fun toggleShuffle() = audioController.toggleShuffle()
     fun cycleRepeatMode() = audioController.cycleRepeatMode()
-    fun clearPlayerError() = audioController.clearError()
-
-    fun toggleOfflineOnly() {
-        val next = !uiState.value.offlineOnly
-        viewModelScope.launch {
-            preferences.saveOfflineOnlyFilter(next)
-        }
-    }
-
-    fun toggleArabicText() {
-        localFlags.update { it.copy(showArabicText = !it.showArabicText) }
-    }
-
-    fun toggleTranslation() {
-        localFlags.update { it.copy(showTranslation = !it.showTranslation) }
-    }
-
-    fun downloadTrackOffline(track: AudioTrack) {
-        viewModelScope.launch {
-            val result = audioRepository.downloadTrackOffline(track)
-            localFlags.update {
-                it.copy(
-                    statusBanner = if (result.isSuccess) {
-                        "Saved \"${track.title}\" for offline playback."
-                    } else {
-                        "Download failed (${result.exceptionOrNull()?.message ?: "offline"}). Check connection or import a local file."
-                    }
-                )
-            }
-        }
-    }
-
-    fun downloadAllAyatsOffline() {
-        viewModelScope.launch {
-            localFlags.update { it.copy(statusBanner = "Downloading Quranic Ayats for offline playback...") }
-            val count = audioRepository.downloadAllPendingAyats()
-            localFlags.update {
-                it.copy(
-                    statusBanner = if (count > 0) {
-                        "Saved $count Ayat recitation(s) offline."
-                    } else {
-                        "No new Ayats downloaded (already offline or no network)."
-                    }
-                )
-            }
-        }
-    }
 
     fun importLocalFiles(
         uris: List<Uri>,
@@ -149,15 +95,6 @@ class PlayerViewModel(
         if (uris.isEmpty()) return
         viewModelScope.launch {
             val imported = audioRepository.importLocalAudioUris(uris, mode, surahName, ayatNumber)
-            localFlags.update {
-                it.copy(
-                    statusBanner = if (imported.isNotEmpty()) {
-                        "Imported ${imported.size} offline ${mode.label.lowercase()} file(s)."
-                    } else {
-                        "Could not import selected audio file(s)."
-                    }
-                )
-            }
             imported.firstOrNull()?.let { first ->
                 val queue = audioRepository.getTracksByMode(mode)
                 audioController.playTrack(first, queue)
@@ -169,42 +106,44 @@ class PlayerViewModel(
         viewModelScope.launch {
             localFlags.update { it.copy(isScanningDevice = true) }
             val found = audioRepository.scanDeviceAudio()
-            localFlags.update {
-                it.copy(
-                    isScanningDevice = false,
-                    scannedCandidates = found,
-                    statusBanner = if (found.isEmpty()) {
-                        "No audio files found via MediaStore. Try Import File to pick MP3/M4A directly."
-                    } else null
-                )
+            if (found.isNotEmpty()) {
+                audioRepository.addDeviceCandidates(found, AudioMode.SONG)
             }
+            localFlags.update { it.copy(isScanningDevice = false, scannedCandidates = emptyList()) }
         }
     }
 
-    fun importScannedCandidates(candidates: List<DeviceAudioCandidate>, mode: AudioMode) {
-        viewModelScope.launch {
-            val added = audioRepository.addDeviceCandidates(candidates, mode)
-            localFlags.update {
-                it.copy(
-                    scannedCandidates = emptyList(),
-                    statusBanner = "Added $added local track(s) to ${mode.label} for offline playback."
-                )
-            }
-        }
+    fun deleteTrack(track: AudioTrack) {
+        viewModelScope.launch { audioRepository.deleteTrack(track) }
     }
+
+    fun dismissBanner() {
+        localFlags.update { it.copy(statusBanner = null) }
+    }
+
+    fun clearPlayerError() = audioController.clearError()
 
     fun dismissScannedCandidates() {
         localFlags.update { it.copy(scannedCandidates = emptyList()) }
     }
 
-    fun deleteTrack(track: AudioTrack) {
+    fun importScannedCandidates(candidates: List<DeviceAudioCandidate>, mode: AudioMode) {
         viewModelScope.launch {
-            audioRepository.deleteTrack(track)
+            audioRepository.addDeviceCandidates(candidates, mode)
+            localFlags.update { it.copy(scannedCandidates = emptyList()) }
         }
     }
 
-    fun dismissBanner() {
-        localFlags.update { it.copy(statusBanner = null) }
+    fun toggleArabicText() { localFlags.update { it.copy(showArabicText = !it.showArabicText) } }
+    fun toggleTranslation() { localFlags.update { it.copy(showTranslation = !it.showTranslation) } }
+    fun toggleOfflineOnly() {
+        viewModelScope.launch { preferences.saveOfflineOnlyFilter(!uiState.value.offlineOnly) }
+    }
+    fun downloadTrackOffline(track: AudioTrack) {
+        viewModelScope.launch { audioRepository.downloadTrackOffline(track) }
+    }
+    fun downloadAllAyatsOffline() {
+        viewModelScope.launch { audioRepository.downloadAllPendingAyats() }
     }
 
     companion object {
